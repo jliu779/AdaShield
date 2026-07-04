@@ -14,3 +14,11 @@ python inference_benign_code/benign_ours.py  \
 python inference_benign_code/benign_ours.py  \
             --target-model "minigptv2" \
             --result_path "results/benign/minigptv2-ours.jsonl"
+
+
+# ===== 新增 MLLM 模型 =====
+for model in "llava-1.5" "qwen2.5-vl" "internvl3.5" "internvl3" "qwen3-vl" "glm-4.1v"; do
+    python inference_benign_code/benign_ours.py \
+        --target-model "$model" \
+        --result_path "results/benign/$model-ours.jsonl"
+done

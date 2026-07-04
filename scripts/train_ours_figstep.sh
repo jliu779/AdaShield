@@ -39,3 +39,15 @@ do
     --target-model "minigptv2"  \
     --init_defense_prompt_path "prompts/static_defense_prompt.txt"
 done
+
+
+# ===== 新增 MLLM 模型 =====
+for model in "llava-1.5" "qwen2.5-vl" "internvl3.5" "internvl3" "qwen3-vl" "glm-4.1v"; do
+    for element in "${scenario_list[@]}"; do
+        echo ${element} ${model}
+        python main_figstep.py \
+        --scenario "$element" \
+        --target-model "$model" \
+        --init_defense_prompt_path "prompts/static_defense_prompt.txt"
+    done
+done

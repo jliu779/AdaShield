@@ -2,6 +2,8 @@ import argparse
 from system_prompts import get_defense_system_prompt
 from loggers import WandBLogger
 from conversers import load_defense_and_target_models
+from config import (LLAVA15_PATH, QWEN25VL_PATH, INTERNVL35_PATH,
+                    INTERNVL3_PATH, QWEN3VL_PATH, GLM41V_PATH)
 from common import conv_template
 import os
 import json
@@ -188,7 +190,7 @@ if __name__ == '__main__':
         "--defense-model",
         default = "vicuna",
         help = "Name of defensing model.",
-        choices=["vicuna", "llama-2", "gpt-3.5-turbo", "gpt-4", "claude-instant-1","claude-2", "palm-2"]
+        choices=["vicuna", "llama-2", "llama-3", "gpt-3.5-turbo", "gpt-4", "claude-instant-1","claude-2", "palm-2"]
     )
     parser.add_argument(
         "--defense-max-n-tokens",
@@ -209,7 +211,8 @@ if __name__ == '__main__':
         "--target-model",
         default = "llava",
         help = "Name of target vision-language model.",
-        choices=["cogvlm", "minigptv2", "llava"]
+        choices=["cogvlm", "minigptv2", "llava",
+                 "llava-1.5", "qwen2.5-vl", "internvl3.5", "internvl3", "qwen3-vl", "glm-4.1v"]
     )
 
     ##################################################
@@ -321,5 +324,41 @@ if __name__ == '__main__':
         args.num_beams=1
         args.max_new_tokens=512
         args.max_length=3000
+
+    elif args.target_model == "llava-1.5":
+        args.model_path=LLAVA15_PATH
+        args.temperature=0.2
+        args.top_p=0.7
+        args.max_new_tokens=2048
+
+    elif args.target_model == "qwen2.5-vl":
+        args.model_path=QWEN25VL_PATH
+        args.temperature=0.2
+        args.top_p=0.7
+        args.max_new_tokens=2048
+
+    elif args.target_model == "internvl3.5":
+        args.model_path=INTERNVL35_PATH
+        args.temperature=0.2
+        args.top_p=0.7
+        args.max_new_tokens=2048
+
+    elif args.target_model == "internvl3":
+        args.model_path=INTERNVL3_PATH
+        args.temperature=0.2
+        args.top_p=0.7
+        args.max_new_tokens=2048
+
+    elif args.target_model == "qwen3-vl":
+        args.model_path=QWEN3VL_PATH
+        args.temperature=0.2
+        args.top_p=0.7
+        args.max_new_tokens=2048
+
+    elif args.target_model == "glm-4.1v":
+        args.model_path=GLM41V_PATH
+        args.temperature=0.2
+        args.top_p=0.7
+        args.max_new_tokens=2048
 
     main(args)

@@ -43,3 +43,17 @@ do
     --wandb_subdir "latest" \
     --result_path "your_answer_path"
 done
+
+
+# ===== 新增 MLLM 模型 =====
+for model in "llava-1.5" "qwen2.5-vl" "internvl3.5" "internvl3" "qwen3-vl" "glm-4.1v"; do
+    for element in "${scenario_list[@]}"; do
+        echo ${element} ${model}
+        python inference_attack_code/infer_figstep.py \
+        --scenario "$element" \
+        --table_dir "figstep_wandb/$model/" \
+        --target-model "$model" \
+        --wandb_subdir "latest" \
+        --result_path "your_answer_path"
+    done
+done

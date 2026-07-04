@@ -1,0 +1,13 @@
+conda activate ecso
+cd "/Users/singlepoint/Documents/2026-vlm-subspace /ECSO"
+
+# ECSO pipeline on all manifest benchmarks (13 eval sets, excludes alignment anchor)
+# VLM=llava15 MODEL_PATH=/path/to/llava-1.5-7b-hf bash runners/run_ecso_full.sh
+# LIMIT=5 bash runners/run_ecso_full.sh
+
+VLM=llava15 MODEL_PATH="models/llava-1.5-7b" bash runners/run_ecso_full.sh
+
+# Single manifest smoke test:
+# MODEL_PATH=models/llava-1.5-7b LIMIT=2 \
+#   bash scripts/v1_5/eval_safe/gen_manifest_ecso.sh \
+#   manifests/xstest_safe.jsonl outputs/test_ecso.jsonl

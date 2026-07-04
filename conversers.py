@@ -2,8 +2,11 @@
 import common
 from language_models import GPT, Claude, PaLM, HuggingFace
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from config import VICUNA_PATH, LLAMA_PATH, DEFENSE_TEMP, DEFENSE_TOP_P
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoProcessor
+from config import (VICUNA_PATH, LLAMA_PATH, LLAMA3_PATH,
+                    LLAVA15_PATH, QWEN25VL_PATH, INTERNVL35_PATH,
+                    INTERNVL3_PATH, QWEN3VL_PATH, GLM41V_PATH,
+                    DEFENSE_TEMP, DEFENSE_TOP_P)
 import os
 
 from PIL import Image
@@ -51,6 +54,18 @@ def load_defense_and_target_models(args):
         targetVLM = MyMinigptv2(args)
     elif args.target_model == 'cogvlm':
         targetVLM = MyCogVLM(args)
+    elif args.target_model == 'llava-1.5':
+        targetVLM = MyLlava15HF(args)
+    elif args.target_model == 'qwen2.5-vl':
+        targetVLM = MyQwen25VL(args)
+    elif args.target_model == 'internvl3.5':
+        targetVLM = MyInternVL35(args)
+    elif args.target_model == 'internvl3':
+        targetVLM = MyInternVL3(args)
+    elif args.target_model == 'qwen3-vl':
+        targetVLM = MyQwen3VL(args)
+    elif args.target_model == 'glm-4.1v':
+        targetVLM = MyGLM41V(args)
     else:
         print("Unknown target model: {}".format(args.target_model))    
 
@@ -343,6 +358,297 @@ class MyCogVLM(TargetVLM):
         respone = self.tokenizer.decode(outputs[0])
         return respone
 
+
+# ==================== 新增 MLLM 目标模型 ====================
+
+class MyLlava15HF(TargetVLM):
+    """LLaVA-1.5-7B HF 版本 (llava-hf/llava-1.5-7b-hf)"""
+    def __init__(self, args):
+        self.model = AutoModelForCausalLM.from_pretrained(
+            args.model_path,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
+        ).eval()
+        self.processor = AutoProcessor.from_pretrained(
+            args.model_path,
+            trust_remote_code=True
+        )
+        self.temperature = args.temperature
+        self.top_p = args.top_p
+        self.max_new_tokens = args.max_new_tokens
+
+    def get_response(self, qs, defense_query, full_image_path):
+        query = qs + defense_query + qs
+        image = Image.open(full_image_path).convert('RGB')
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": image},
+            {"type": "text", "text": query}
+        ]}]
+        text = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self.processor(
+            text=text, images=image, return_tensors="pt"
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                do_sample=True
+            )
+        input_len = inputs['input_ids'].shape[1]
+        response = self.processor.decode(
+            output_ids[0][input_len:], skip_special_tokens=True
+        ).strip()
+        return response
+
+
+class MyQwen25VL(TargetVLM):
+    """Qwen2.5-VL-7B-Instruct"""
+    def __init__(self, args):
+        self.model = AutoModelForCausalLM.from_pretrained(
+            args.model_path,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
+        ).eval()
+        self.processor = AutoProcessor.from_pretrained(
+            args.model_path,
+            trust_remote_code=True
+        )
+        self.temperature = args.temperature
+        self.top_p = args.top_p
+        self.max_new_tokens = args.max_new_tokens
+
+    def get_response(self, qs, defense_query, full_image_path):
+        query = qs + defense_query + qs
+        image = Image.open(full_image_path).convert('RGB')
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": image},
+            {"type": "text", "text": query}
+        ]}]
+        text = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self.processor(
+            text=text, images=image, return_tensors="pt"
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                do_sample=True
+            )
+        input_len = inputs['input_ids'].shape[1]
+        response = self.processor.decode(
+            output_ids[0][input_len:], skip_special_tokens=True
+        ).strip()
+        return response
+
+
+class MyInternVL35(TargetVLM):
+    """InternVL3.5-8B"""
+    def __init__(self, args):
+        self.model = AutoModelForCausalLM.from_pretrained(
+            args.model_path,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
+        ).eval()
+        self.processor = AutoProcessor.from_pretrained(
+            args.model_path,
+            trust_remote_code=True
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            args.model_path,
+            trust_remote_code=True
+        )
+        self.temperature = args.temperature
+        self.top_p = args.top_p
+        self.max_new_tokens = args.max_new_tokens
+
+    def get_response(self, qs, defense_query, full_image_path):
+        query = qs + defense_query + qs
+        image = Image.open(full_image_path).convert('RGB')
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": image},
+            {"type": "text", "text": query}
+        ]}]
+        text = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self.processor(
+            text=text, images=image, return_tensors="pt"
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                do_sample=True
+            )
+        input_len = inputs['input_ids'].shape[1]
+        response = self.processor.decode(
+            output_ids[0][input_len:], skip_special_tokens=True
+        ).strip()
+        return response
+
+
+class MyInternVL3(TargetVLM):
+    """InternVL3-8B"""
+    def __init__(self, args):
+        self.model = AutoModelForCausalLM.from_pretrained(
+            args.model_path,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
+        ).eval()
+        self.processor = AutoProcessor.from_pretrained(
+            args.model_path,
+            trust_remote_code=True
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            args.model_path,
+            trust_remote_code=True
+        )
+        self.temperature = args.temperature
+        self.top_p = args.top_p
+        self.max_new_tokens = args.max_new_tokens
+
+    def get_response(self, qs, defense_query, full_image_path):
+        query = qs + defense_query + qs
+        image = Image.open(full_image_path).convert('RGB')
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": image},
+            {"type": "text", "text": query}
+        ]}]
+        text = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self.processor(
+            text=text, images=image, return_tensors="pt"
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                do_sample=True
+            )
+        input_len = inputs['input_ids'].shape[1]
+        response = self.processor.decode(
+            output_ids[0][input_len:], skip_special_tokens=True
+        ).strip()
+        return response
+
+
+class MyQwen3VL(TargetVLM):
+    """Qwen3-VL-8B-Instruct"""
+    def __init__(self, args):
+        self.model = AutoModelForCausalLM.from_pretrained(
+            args.model_path,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
+        ).eval()
+        self.processor = AutoProcessor.from_pretrained(
+            args.model_path,
+            trust_remote_code=True
+        )
+        self.temperature = args.temperature
+        self.top_p = args.top_p
+        self.max_new_tokens = args.max_new_tokens
+
+    def get_response(self, qs, defense_query, full_image_path):
+        query = qs + defense_query + qs
+        image = Image.open(full_image_path).convert('RGB')
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": image},
+            {"type": "text", "text": query}
+        ]}]
+        text = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self.processor(
+            text=text, images=image, return_tensors="pt"
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                do_sample=True
+            )
+        input_len = inputs['input_ids'].shape[1]
+        response = self.processor.decode(
+            output_ids[0][input_len:], skip_special_tokens=True
+        ).strip()
+        return response
+
+
+class MyGLM41V(TargetVLM):
+    """GLM-4.1V-9B-Thinking"""
+    def __init__(self, args):
+        self.model = AutoModelForCausalLM.from_pretrained(
+            args.model_path,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
+        ).eval()
+        self.processor = AutoProcessor.from_pretrained(
+            args.model_path,
+            trust_remote_code=True
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            args.model_path,
+            trust_remote_code=True
+        )
+        self.temperature = args.temperature
+        self.top_p = args.top_p
+        self.max_new_tokens = args.max_new_tokens
+
+    def get_response(self, qs, defense_query, full_image_path):
+        query = qs + defense_query + qs
+        image = Image.open(full_image_path).convert('RGB')
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": image},
+            {"type": "text", "text": query}
+        ]}]
+        text = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self.processor(
+            text=text, images=image, return_tensors="pt"
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                do_sample=True
+            )
+        input_len = inputs['input_ids'].shape[1]
+        response = self.processor.decode(
+            output_ids[0][input_len:], skip_special_tokens=True
+        ).strip()
+        return response
+
+
 def load_indiv_model(model_name, device=None):
     model_path, template = get_model_path_and_template(model_name)
     if model_name in ["gpt-3.5-turbo", "gpt-4"]:
@@ -366,6 +672,9 @@ def load_indiv_model(model_name, device=None):
             tokenizer.pad_token = tokenizer.unk_token
             tokenizer.padding_side = 'left'
         if 'vicuna' in model_path.lower():
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.padding_side = 'left'
+        if 'llama-3' in model_path.lower():
             tokenizer.pad_token = tokenizer.eos_token
             tokenizer.padding_side = 'left'
         if not tokenizer.pad_token:
@@ -404,6 +713,10 @@ def get_model_path_and_template(model_name):
         "palm-2":{
             "path":"palm-2",
             "template":"palm-2"
+        },
+        "llama-3":{
+            "path": LLAMA3_PATH,
+            "template": "llama-3"
         }
     }
     path, template = full_model_dict[model_name]["path"], full_model_dict[model_name]["template"]
