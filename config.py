@@ -1,6 +1,6 @@
 VICUNA_PATH = ""
 LLAMA_PATH = ""
-LLAMA3_PATH = "/hub/huggingface/models/meta-llama/Meta-Llama-3.1-8B-Instruct"
+LLAMA3_PATH = "/hub/huggingface/models/meta/Llama-3.1-8B-Instruct"
 
 # Target MLLM paths
 LLAVA15_PATH = "/hub/huggingface/models/llava-hf/llava-1.5-7b-hf"
