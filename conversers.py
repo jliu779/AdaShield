@@ -2,40 +2,39 @@
 import common
 from language_models import GPT, Claude, PaLM, HuggingFace
 import torch
-from transformers import AutoModelForCausalLM, AutoModelForVision2Seq, AutoModel, AutoTokenizer, AutoProcessor
+from transformers import (AutoModelForCausalLM, AutoModelForVision2Seq,
+                          AutoModel, AutoTokenizer, AutoProcessor, LlamaTokenizer)
 from config import (VICUNA_PATH, LLAMA_PATH, LLAMA3_PATH,
                     LLAVA15_PATH, QWEN25VL_PATH, INTERNVL35_PATH,
                     INTERNVL3_PATH, QWEN3VL_PATH, GLM41V_PATH,
                     DEFENSE_TEMP, DEFENSE_TOP_P)
 import os
-
 from PIL import Image
-
-
-from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
-from llava.conversation import conv_templates, SeparatorStyle
-from llava.model.builder import load_pretrained_model
-from llava.utils import disable_torch_init
-from llava.mm_utils import tokenizer_image_token, get_model_name_from_path, KeywordsStoppingCriteria
-
-
-from minigpt4.common.config import Config
-from minigpt4.common.registry import registry
-from minigpt4.conversation.conversation import Conversation, SeparatorStyle, Chat
-from minigpt4.datasets.builders import *
-from minigpt4.models import *
-from minigpt4.processors import *
-from minigpt4.runners import *
-from minigpt4.tasks import *
-
-
-from transformers import AutoModelForCausalLM, LlamaTokenizer
-from accelerate import init_empty_weights, infer_auto_device_map, load_checkpoint_and_dispatch
+from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 from system_prompts import get_scenario_rule
-
-
 import warnings
 warnings.filterwarnings("ignore")
+
+# ---- 原版 LLaVA（非 HF）导入 —— 仅旧模型需要 ----
+try:
+    from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+    from llava.conversation import conv_templates, SeparatorStyle
+    from llava.model.builder import load_pretrained_model
+    from llava.utils import disable_torch_init
+    from llava.mm_utils import tokenizer_image_token, get_model_name_from_path, KeywordsStoppingCriteria
+    _HAS_LLAVA = True
+except ImportError:
+    _HAS_LLAVA = False
+
+# ---- MiniGPT-4 导入 —— 仅旧模型需要 ----
+try:
+    from minigpt4.common.config import Config
+    from minigpt4.common.registry import registry
+    from minigpt4.conversation.conversation import Conversation, SeparatorStyle as MG4SeparatorStyle
+    from minigpt4.conversation.conversation import Chat
+    _HAS_MINIGPT4 = True
+except ImportError:
+    _HAS_MINIGPT4 = False
 
 def load_defense_and_target_models(args):
     # Load attack model and tokenizer
@@ -49,8 +48,12 @@ def load_defense_and_target_models(args):
                         )
 
     if args.target_model == 'llava':
+        if not _HAS_LLAVA:
+            raise ImportError("原版 LLaVA 库不可用，请使用 llava-1.5 (HF版本)")
         targetVLM = MyLlava(args)
     elif args.target_model == 'minigptv2':
+        if not _HAS_MINIGPT4:
+            raise ImportError("MiniGPT-4 库不可用")
         targetVLM = MyMinigptv2(args)
     elif args.target_model == 'cogvlm':
         targetVLM = MyCogVLM(args)
@@ -265,7 +268,7 @@ class MyMinigptv2(TargetVLM):
             roles=(r"<s>[INST] ", r" [/INST]"),
             messages=[],
             offset=2,
-            sep_style=SeparatorStyle.SINGLE,
+            sep_style=MG4SeparatorStyle.SINGLE,
             sep="",
         )
         self.chat = Chat(model, vis_processor, device=device)
