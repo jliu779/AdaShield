@@ -41,7 +41,8 @@ import pandas as pd
 import shortuuid
 from PIL import Image
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoModelForVision2Seq, AutoModel, AutoProcessor
+from transformers import (AutoModelForCausalLM, AutoModelForVision2Seq,
+                          AutoModel, AutoProcessor, AutoTokenizer)
 
 # 项目路径
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -196,7 +197,7 @@ def retrieve_defense(defense_pool, embedding_pool, sample_embedding,
 # VLM 模型加载（统一 HF 模式）
 # ============================================================
 def load_hf_vlm(model_path):
-    """统一加载 HuggingFace VLM —— 依次尝试多种 auto class"""
+    """统一加载 HuggingFace VLM；返回 (model, processor, tokenizer, use_images_kwarg)"""
     model = None
     # 1) AutoModelForVision2Seq: LLaVA-HF, Qwen2.5-VL, Qwen3-VL 等
     try:
@@ -229,46 +230,136 @@ def load_hf_vlm(model_path):
             trust_remote_code=True,
         ).eval()
 
-    processor = AutoProcessor.from_pretrained(
+    # 始终加载独立的 tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(
         model_path,
         trust_remote_code=True
     )
-    return model, processor
+
+    # 尝试加载 processor（部分模型可能因版本不兼容失败）
+    processor = None
+    use_images_kwarg = False
+    try:
+        processor = AutoProcessor.from_pretrained(
+            model_path,
+            trust_remote_code=True
+        )
+        use_images_kwarg = (
+            hasattr(processor, 'image_processor')
+            and processor.image_processor is not None
+        )
+    except Exception:
+        pass
+
+    return model, processor, tokenizer, use_images_kwarg
 
 
-def hf_vlm_generate(model, processor, query, image_path,
+def hf_vlm_generate(model, processor, tokenizer, use_images_kwarg, query, image_path,
                     max_new_tokens=2048, temperature=0.2, top_p=0.7):
-    """统一 HuggingFace VLM 推理"""
+    """统一 HuggingFace VLM 推理；自动适配不同模型 API"""
     try:
         image = Image.open(image_path).convert('RGB')
     except Exception:
         return None
 
-    messages = [{"role": "user", "content": [
-        {"type": "image", "image": image},
-        {"type": "text", "text": query}
-    ]}]
-    text = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
-    inputs = processor(
-        text=text, images=image, return_tensors="pt"
-    ).to(model.device)
+    # 尝试 1: 标准 HF processor API（LLaVA, Qwen 等）
+    if use_images_kwarg:
+        try:
+            messages = [{"role": "user", "content": [
+                {"type": "image", "image": image},
+                {"type": "text", "text": query}
+            ]}]
+            text = processor.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            inputs = processor(
+                text=text, images=image, return_tensors="pt"
+            ).to(model.device)
 
-    with torch.no_grad():
-        output_ids = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            do_sample=True,
-            pad_token_id=processor.tokenizer.eos_token_id
-        )
-    input_len = inputs['input_ids'].shape[1]
-    response = processor.decode(
-        output_ids[0][input_len:], skip_special_tokens=True
-    ).strip()
-    return response
+            with torch.no_grad():
+                output_ids = model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=True,
+                    pad_token_id=processor.tokenizer.eos_token_id
+                )
+            input_len = inputs['input_ids'].shape[1]
+            return processor.decode(
+                output_ids[0][input_len:], skip_special_tokens=True
+            ).strip()
+        except Exception as e:
+            print(f"  [WARN] 标准 processor API 失败 ({e})，尝试 model.chat()...")
+
+    # 尝试 2: model.chat() —— InternVL / GLM-4.1V 等
+    if hasattr(model, 'chat'):
+        try:
+            from transformers import GenerationConfig
+            gen_config = GenerationConfig(
+                max_new_tokens=max_new_tokens,
+                temperature=temperature if temperature > 0 else 0.2,
+                top_p=top_p,
+                do_sample=temperature > 0,
+            )
+
+            # 直接尝试传 PIL 图片（GLM-4.1V 等支持）
+            response = model.chat(tokenizer, image, query, gen_config)
+            if isinstance(response, str):
+                return response.strip()
+            elif isinstance(response, tuple) and len(response) > 0:
+                return str(response[0]).strip()
+            return str(response).strip()
+        except (TypeError, AttributeError):
+            pass  # chat() 需要 pixel_values 而非 PIL image
+
+        # InternVL 需要 pixel_values → 手动构建
+        try:
+            if hasattr(model, 'img_context_token_id'):
+                from torchvision.transforms.functional import InterpolationMode
+                import torchvision.transforms as T
+                IMAGENET_MEAN = (0.485, 0.456, 0.406)
+                IMAGENET_STD = (0.229, 0.224, 0.225)
+                transform = T.Compose([
+                    T.Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
+                    T.Resize((448, 448), interpolation=InterpolationMode.BICUBIC),
+                    T.ToTensor(),
+                    T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+                ])
+                pixel_values = transform(image).unsqueeze(0).to(
+                    dtype=torch.bfloat16, device=model.device
+                )
+                response = model.chat(tokenizer, pixel_values, query, gen_config)
+                return response.strip()
+        except Exception as e:
+            print(f"  [WARN] InternVL chat() 失败 ({e})")
+
+    # 尝试 3: model.generate() 直接 tokenize（最后手段）
+    try:
+        text = tokenizer.apply_chat_template(
+            [{"role": "user", "content": [
+                {"type": "image", "image": image},
+                {"type": "text", "text": query}
+            ]}],
+            tokenize=True, add_generation_prompt=True, return_tensors="pt"
+        ).to(model.device)
+
+        with torch.no_grad():
+            output_ids = model.generate(
+                text,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                do_sample=True,
+            )
+        input_len = text.shape[1]
+        return tokenizer.decode(
+            output_ids[0][input_len:], skip_special_tokens=True
+        ).strip()
+    except Exception:
+        pass
+
+    return "[ERROR: VLM generation failed — unsupported model API]"
 
 
 # ============================================================
@@ -334,7 +425,7 @@ def run_benchmark(args):
     max_new_tokens = config.get("max_new_tokens", 2048)
 
     print(f"[INFO] 加载 VLM: {args.target_model} ({model_path})")
-    model, processor = load_hf_vlm(model_path)
+    model, processor, tokenizer, use_images_kwarg = load_hf_vlm(model_path)
 
     # ---- 5. 输出文件 ----
     if args.output:
@@ -399,7 +490,8 @@ def run_benchmark(args):
 
             # VLM 推理
             response = hf_vlm_generate(
-                model, processor, full_query, image_path,
+                model, processor, tokenizer, use_images_kwarg,
+                full_query, image_path,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 top_p=top_p
