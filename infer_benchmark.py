@@ -120,22 +120,24 @@ def build_defense_pool(pool_dir_or_glob, clip_model, clip_preprocess):
     """
     从训练结果的 CSV 文件中构建防御提示词池。
 
-    pool_dir_or_glob: 目录路径或 glob 模式
-        例: "figstep_wandb/cogvlm" → 自动搜索其下所有 final_table.csv
-        例: "figstep_wandb/cogvlm/*/wandb/latest/files/final_table.csv" → 精确匹配
+    pool_dirs: 目录路径列表或单个 glob/目录
     """
-    if os.path.isdir(pool_dir_or_glob):
-        pattern = os.path.join(pool_dir_or_glob, "**/final_table.csv")
-    else:
-        pattern = pool_dir_or_glob
+    if isinstance(pool_dirs, str):
+        pool_dirs = [pool_dirs]
 
-    csv_files = glob.glob(pattern, recursive=True)
-    if not csv_files:
-        # 尝试在目录下搜索
-        csv_files = glob.glob(os.path.join(pool_dir_or_glob, "**/final_table.csv"), recursive=True)
+    csv_files = []
+    for pool_dir_or_glob in pool_dirs:
+        if os.path.isdir(pool_dir_or_glob):
+            pattern = os.path.join(pool_dir_or_glob, "**/final_table.csv")
+        else:
+            pattern = pool_dir_or_glob
+        found = glob.glob(pattern, recursive=True)
+        if not found:
+            found = glob.glob(os.path.join(pool_dir_or_glob, "**/final_table.csv"), recursive=True)
+        csv_files.extend(found)
 
     if not csv_files:
-        print(f"[WARNING] 未找到任何 defense pool CSV 文件: {pattern}")
+        print(f"[WARNING] 未找到任何 defense pool CSV 文件: {pool_dirs}")
         return [], None, []
 
     print(f"[INFO] 找到 {len(csv_files)} 个 defense pool CSV 文件")
@@ -547,8 +549,8 @@ if __name__ == "__main__":
                         help="目标 VLM 模型")
 
     # 防御
-    parser.add_argument("--defense-pool", type=str, default=None,
-                        help="防御池目录或 glob 模式（训练结果 CSV 所在目录）")
+    parser.add_argument("--defense-pool", type=str, default=None, action="append",
+                        help="防御池目录（可多次指定，如 --defense-pool A --defense-pool B）")
     parser.add_argument("--no-defense", action="store_true",
                         help="不使用防御提示词（baseline）")
     parser.add_argument("--retrival-type", type=str,

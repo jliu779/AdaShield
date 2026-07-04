@@ -71,8 +71,11 @@ build_extra_args() {
   fi
   if [[ "$NO_DEFENSE" == "1" ]]; then
     args+=(--no-defense)
-  elif [[ -n "$DEFENSE_POOL" ]]; then
-    args+=(--defense-pool "$DEFENSE_POOL")
+  elif [[ -n "${DEFENSE_POOL:-}" ]]; then
+    # 支持多个防御池路径（空格分隔）
+    for pool in $DEFENSE_POOL; do
+      [[ -n "$pool" ]] && args+=(--defense-pool "$pool")
+    done
   fi
   args+=(--retrival-type "$RETRIVAL_TYPE")
   echo "${args[@]}"
