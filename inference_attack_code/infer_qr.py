@@ -16,7 +16,7 @@ from llava.utils import disable_torch_init
 from llava.mm_utils import tokenizer_image_token, get_model_name_from_path, KeywordsStoppingCriteria
 
 ## cogvlm
-from transformers import AutoModelForCausalLM, AutoProcessor, LlamaTokenizer
+from transformers import AutoModelForCausalLM, AutoModelForVision2Seq, AutoProcessor, LlamaTokenizer
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 
 # minigptv4
@@ -55,17 +55,29 @@ from config import (LLAVA15_PATH, QWEN25VL_PATH, INTERNVL35_PATH,
 
 
 def _load_hf_vlm(model_path, device="cuda"):
-    """统一加载 HuggingFace VLM 模型"""
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-        trust_remote_code=True
-    ).eval()
-    processor = AutoProcessor.from_pretrained(
-        model_path,
-        trust_remote_code=True
-    )
+    """统一加载 HuggingFace VLM 模型 —— 依次尝试多种 auto class"""
+    model = None
+    try:
+        model = AutoModelForVision2Seq.from_pretrained(
+            model_path, torch_dtype=torch.bfloat16, device_map="auto",
+        ).eval()
+    except (ValueError, ImportError, KeyError):
+        pass
+    if model is None:
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_path, torch_dtype=torch.bfloat16, device_map="auto",
+                trust_remote_code=True,
+            ).eval()
+        except ValueError:
+            pass
+    if model is None:
+        from transformers import AutoModel
+        model = AutoModel.from_pretrained(
+            model_path, torch_dtype=torch.bfloat16, device_map="auto",
+            trust_remote_code=True,
+        ).eval()
+    processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
     return model, processor
 
 

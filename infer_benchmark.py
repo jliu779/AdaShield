@@ -41,7 +41,7 @@ import pandas as pd
 import shortuuid
 from PIL import Image
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoProcessor
+from transformers import AutoModelForCausalLM, AutoModelForVision2Seq, AutoModel, AutoProcessor
 
 # 项目路径
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -196,13 +196,39 @@ def retrieve_defense(defense_pool, embedding_pool, sample_embedding,
 # VLM 模型加载（统一 HF 模式）
 # ============================================================
 def load_hf_vlm(model_path):
-    """统一加载 HuggingFace VLM"""
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-        trust_remote_code=True
-    ).eval()
+    """统一加载 HuggingFace VLM —— 依次尝试多种 auto class"""
+    model = None
+    # 1) AutoModelForVision2Seq: LLaVA-HF, Qwen2.5-VL, Qwen3-VL 等
+    try:
+        model = AutoModelForVision2Seq.from_pretrained(
+            model_path,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        ).eval()
+    except (ValueError, ImportError, KeyError):
+        pass
+
+    # 2) AutoModelForCausalLM: 部分 trust_remote_code 模型
+    if model is None:
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+                trust_remote_code=True,
+            ).eval()
+        except ValueError:
+            pass
+
+    # 3) AutoModel: InternVL, GLM-4.1V 等自定义模型
+    if model is None:
+        model = AutoModel.from_pretrained(
+            model_path,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True,
+        ).eval()
+
     processor = AutoProcessor.from_pretrained(
         model_path,
         trust_remote_code=True

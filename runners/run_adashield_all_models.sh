@@ -56,7 +56,7 @@ run_one_model() {
     SKIP_SAFETY="${SKIP_SAFETY:-0}" \
     SKIP_BENIGN="${SKIP_BENIGN:-0}" \
     OUT_DIR="${OUT_DIR:-$ROOT/results}" \
-    CONTINUE_ON_ERROR="${CONTINUE_ON_ERROR:-1}" \
+    CONTINUE_ON_ERROR=1 \
     bash "$RUNNER"
 
   log "##  DONE  $model"

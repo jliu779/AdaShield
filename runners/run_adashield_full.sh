@@ -49,7 +49,7 @@ declare -A SAFETY_BENCHMARKS=(
   ["mm_safetybench_300"]=192
   ["siuo_167"]=192
   ["mssbench_unsafe_full"]=192
-  ["vlsafe_alignment_anchor"]=192
+  ["vlsafe_alignment_anchor_seed42"]=192
 )
 
 # 良性/通用能力 benchmark

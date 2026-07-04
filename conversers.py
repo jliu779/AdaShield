@@ -2,7 +2,7 @@
 import common
 from language_models import GPT, Claude, PaLM, HuggingFace
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoProcessor
+from transformers import AutoModelForCausalLM, AutoModelForVision2Seq, AutoModel, AutoTokenizer, AutoProcessor
 from config import (VICUNA_PATH, LLAMA_PATH, LLAMA3_PATH,
                     LLAVA15_PATH, QWEN25VL_PATH, INTERNVL35_PATH,
                     INTERNVL3_PATH, QWEN3VL_PATH, GLM41V_PATH,
@@ -361,15 +361,33 @@ class MyCogVLM(TargetVLM):
 
 # ==================== 新增 MLLM 目标模型 ====================
 
+def _load_vlm_model(model_path):
+    """统一加载 VLM —— 依次尝试 AutoModelForVision2Seq → AutoModelForCausalLM → AutoModel"""
+    # 1) AutoModelForVision2Seq: LLaVA-HF, Qwen2.5-VL, Qwen3-VL
+    try:
+        return AutoModelForVision2Seq.from_pretrained(
+            model_path, torch_dtype=torch.bfloat16, device_map="auto",
+        ).eval()
+    except (ValueError, ImportError, KeyError):
+        pass
+    # 2) AutoModelForCausalLM: 部分 trust_remote_code 模型
+    try:
+        return AutoModelForCausalLM.from_pretrained(
+            model_path, torch_dtype=torch.bfloat16, device_map="auto",
+            trust_remote_code=True,
+        ).eval()
+    except ValueError:
+        pass
+    # 3) AutoModel: InternVL, GLM-4.1V 等自定义模型
+    return AutoModel.from_pretrained(
+        model_path, torch_dtype=torch.bfloat16, device_map="auto",
+        trust_remote_code=True,
+    ).eval()
+
 class MyLlava15HF(TargetVLM):
     """LLaVA-1.5-7B HF 版本 (llava-hf/llava-1.5-7b-hf)"""
     def __init__(self, args):
-        self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True
-        ).eval()
+        self.model = _load_vlm_model(args.model_path)
         self.processor = AutoProcessor.from_pretrained(
             args.model_path,
             trust_remote_code=True
@@ -410,12 +428,7 @@ class MyLlava15HF(TargetVLM):
 class MyQwen25VL(TargetVLM):
     """Qwen2.5-VL-7B-Instruct"""
     def __init__(self, args):
-        self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True
-        ).eval()
+        self.model = _load_vlm_model(args.model_path)
         self.processor = AutoProcessor.from_pretrained(
             args.model_path,
             trust_remote_code=True
@@ -456,12 +469,7 @@ class MyQwen25VL(TargetVLM):
 class MyInternVL35(TargetVLM):
     """InternVL3.5-8B"""
     def __init__(self, args):
-        self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True
-        ).eval()
+        self.model = _load_vlm_model(args.model_path)
         self.processor = AutoProcessor.from_pretrained(
             args.model_path,
             trust_remote_code=True
@@ -506,12 +514,7 @@ class MyInternVL35(TargetVLM):
 class MyInternVL3(TargetVLM):
     """InternVL3-8B"""
     def __init__(self, args):
-        self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True
-        ).eval()
+        self.model = _load_vlm_model(args.model_path)
         self.processor = AutoProcessor.from_pretrained(
             args.model_path,
             trust_remote_code=True
@@ -556,12 +559,7 @@ class MyInternVL3(TargetVLM):
 class MyQwen3VL(TargetVLM):
     """Qwen3-VL-8B-Instruct"""
     def __init__(self, args):
-        self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True
-        ).eval()
+        self.model = _load_vlm_model(args.model_path)
         self.processor = AutoProcessor.from_pretrained(
             args.model_path,
             trust_remote_code=True
@@ -602,12 +600,7 @@ class MyQwen3VL(TargetVLM):
 class MyGLM41V(TargetVLM):
     """GLM-4.1V-9B-Thinking"""
     def __init__(self, args):
-        self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True
-        ).eval()
+        self.model = _load_vlm_model(args.model_path)
         self.processor = AutoProcessor.from_pretrained(
             args.model_path,
             trust_remote_code=True
