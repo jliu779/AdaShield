@@ -277,7 +277,7 @@ if __name__ == '__main__':
     
     parser.add_argument("--image_folder", type=str, default="data/QueryRelated")
     parser.add_argument("--init_defense_prompt_path", type=str, default="prompts/static_defense_prompt.txt") # query_fold + query.json
-    parser.add_argument("--prompt_dir", type=str, default="data/QueryRelated") # query_fold + query.json
+    parser.add_argument("--prompt_dir", type=str, default="prompts/QueryRelated") # query_fold + query.json
     parser.add_argument("--train_split_file", type=str, default="data/datasplit/query_related.jsonl") # query_fold + query.json
     #
     parser.add_argument("--defense_success_example", type=str, default="I'm sorry, but the image contains a phrase that is harmful and violates AI safety policy. I cannot assist with such requests.") 
