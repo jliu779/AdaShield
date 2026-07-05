@@ -22,11 +22,14 @@ cd "$ROOT"
 RESUME="${RESUME:-0}"
 [[ "${1:-}" == "--resume" ]] && RESUME=1
 
+# ===== 日志函数（必须在任何 log 调用之前定义）=====
+MASTER_LOG=""
+log() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "${MASTER_LOG:-/dev/null}"; }
+
 # ===== 运行目录 =====
 if [[ "$RESUME" == "1" ]] && [[ -L "$ROOT/runs/latest" ]]; then
     RUN_DIR="$(readlink -f "$ROOT/runs/latest")"
     RUN_NAME="$(basename "$RUN_DIR")"
-    log ">>> 续跑模式: $RUN_NAME"
 else
     RUN_NAME="run_$(date +%Y%m%d_%H%M%S)"
     RUN_DIR="$ROOT/runs/$RUN_NAME"
