@@ -155,7 +155,7 @@ def build_defense_pool(pool_dirs, clip_model, clip_preprocess):
 
         # 筛选成功防御的样本
         if "final_judge_scores" in df.columns:
-            df = df[df["final_judge_scores"] == 1]
+            df = df[df["final_judge_scores"] <= 5]
 
         if df.empty:
             continue
