@@ -122,23 +122,19 @@ for model in "${MODEL_ORDER[@]}"; do
 
             log "  TRAIN [$model] $scene ($((trained + 1))/13)"
 
-            if python main_qureyrelated.py \
+            python main_qureyrelated.py \
                 --target-model "$model" \
                 --defense-model llama-3 \
                 --scenario "$scene" \
-                --init_defense_prompt_path prompts/static_defense_prompt.txt 2>&1 | sed 's/^/    /'; then
-                mark_done "$SCENE_KEY"
+                --init_defense_prompt_path prompts/static_defense_prompt.txt 2>&1 | sed 's/^/    /'
+            # 到此说明成功（失败会直接退出脚本）
 
-                # 提取结果指标写入 results.jsonl
-                python "$SCRIPT_DIR/extract_results.py" "$model" "$scene" >> "$RUN_DIR/results.jsonl" 2>/dev/null || true
-                log "  📊 结果已存档: $model/$scene"
+            mark_done "$SCENE_KEY"
+            python "$SCRIPT_DIR/extract_results.py" "$model" "$scene" >> "$RUN_DIR/results.jsonl" 2>/dev/null || true
+            log "  ✅ [$model] $scene 完成并存档"
 
-                trained=$((trained + 1))
-                done_count=$((done_count + 1))
-            else
-                log "  ❌ FAIL [$model] $scene — 继续下一个场景"
-                # 不标记完成，下次续跑会重试
-            fi
+            trained=$((trained + 1))
+            done_count=$((done_count + 1))
         done
 
         # 全部场景训练完成 → 标记训练阶段完成
@@ -156,16 +152,15 @@ for model in "${MODEL_ORDER[@]}"; do
         EVAL_LOG="$RUN_DIR/models/$model/eval.log"
         mkdir -p "$RUN_DIR/models/$model"
 
-        if CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-1}" \
+        CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-1}" \
             TARGET_MODEL="$model" \
             SKIP_TRAIN=1 \
             SKIP_FIGSTEP=1 \
-            CONTINUE_ON_ERROR=1 \
-            bash runners/run_adashield_train_and_eval.sh 2>&1 | tee "$EVAL_LOG"; then
-            mark_done "$EVAL_DONE_KEY"
-        else
-            log "  ❌ FAIL [$model] 评测 — 下次续跑会重试"
-        fi
+            bash runners/run_adashield_train_and_eval.sh 2>&1 | tee "$EVAL_LOG"
+        # 到此说明成功
+
+        mark_done "$EVAL_DONE_KEY"
+        log "  ✅ [$model] 评测完成"
     fi
 done
 
