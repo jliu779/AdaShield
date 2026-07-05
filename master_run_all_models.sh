@@ -128,6 +128,11 @@ for model in "${MODEL_ORDER[@]}"; do
                 --scenario "$scene" \
                 --init_defense_prompt_path prompts/static_defense_prompt.txt 2>&1 | sed 's/^/    /'; then
                 mark_done "$SCENE_KEY"
+
+                # 提取结果指标写入 results.jsonl
+                python "$SCRIPT_DIR/extract_results.py" "$model" "$scene" >> "$RUN_DIR/results.jsonl" 2>/dev/null || true
+                log "  📊 结果已存档: $model/$scene"
+
                 trained=$((trained + 1))
                 done_count=$((done_count + 1))
             else
