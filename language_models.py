@@ -22,39 +22,73 @@ class LanguageModel():
 class HuggingFace(LanguageModel):
     def __init__(self,model_name, model, tokenizer):
         self.model_name = model_name
-        self.model = model 
+        self.model = model
         self.tokenizer = tokenizer
-        self.eos_token_ids = [self.tokenizer.eos_token_id]
 
-    def generate(self, 
-                    full_prompts: str, 
-                    max_n_tokens: int, 
+        # 处理 eos_token_id 可能是 int 或 list 的情况
+        eos = self.tokenizer.eos_token_id
+        if isinstance(eos, list):
+            self.eos_token_ids = eos
+        else:
+            self.eos_token_ids = [eos]
+
+        # 确保 pad_token_id 已设置，避免 generate 时从 eos_token_id 推断导致数值问题
+        if self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token_id = self.eos_token_ids[0] if self.eos_token_ids else 0
+
+        # 同步到 model.generation_config，防止 generate 内部默认推断
+        if self.model.generation_config.pad_token_id is None:
+            self.model.generation_config.pad_token_id = self.tokenizer.pad_token_id
+
+    def generate(self,
+                    full_prompts: str,
+                    max_n_tokens: int,
                     temperature: float,
                     top_p: float = 1.0,):
-        
+
         inputs = self.tokenizer(full_prompts, return_tensors='pt', padding=True)
         inputs = {k: v.to(self.model.device.index) for k, v in inputs.items()}
-    
-        # Batch generation
-        if temperature > 0:
-            output_ids = self.model.generate(
-                **inputs,
-                max_new_tokens=max_n_tokens, 
-                do_sample=True,
-                temperature=temperature,
-                eos_token_id=self.eos_token_ids,
-                top_p=top_p,
-            )
-        else:
-            output_ids = self.model.generate(
-                **inputs,
-                max_new_tokens=max_n_tokens, 
-                do_sample=False,
-                eos_token_id=self.eos_token_ids,
-                top_p=1,
-                temperature=1, # To prevent warning messages
-            )
-            
+
+        # 显式传入 pad_token_id，防止 HF 从 eos_token_id (可能是 list) 推断导致 NaN
+        pad_token_id = self.tokenizer.pad_token_id
+
+        try:
+            # Batch generation
+            if temperature > 0:
+                output_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_n_tokens,
+                    do_sample=True,
+                    temperature=temperature,
+                    eos_token_id=self.eos_token_ids,
+                    pad_token_id=pad_token_id,
+                    top_p=top_p,
+                )
+            else:
+                output_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_n_tokens,
+                    do_sample=False,
+                    eos_token_id=self.eos_token_ids,
+                    pad_token_id=pad_token_id,
+                    top_p=1,
+                    temperature=1, # To prevent warning messages
+                )
+        except RuntimeError as e:
+            if "CUDA error" in str(e) or "probability tensor" in str(e):
+                print(f"[WARNING] CUDA 生成失败，回退到贪心解码: {e}")
+                output_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_n_tokens,
+                    do_sample=False,
+                    eos_token_id=self.eos_token_ids,
+                    pad_token_id=pad_token_id,
+                    top_p=1,
+                    temperature=1,
+                )
+            else:
+                raise e
+
         # If the model is not an encoder-decoder type, slice off the input tokens
 
         if not self.model.config.is_encoder_decoder:
@@ -72,35 +106,54 @@ class HuggingFace(LanguageModel):
         torch.cuda.empty_cache()
 
         return output
-    
-    def batched_generate(self, 
+
+    def batched_generate(self,
                         full_prompts_list,
-                        max_n_tokens: int, 
+                        max_n_tokens: int,
                         temperature: float,
                         top_p: float = 1.0,):
         inputs = self.tokenizer(full_prompts_list, return_tensors='pt', padding=True)
         inputs = {k: v.to(self.model.device.index) for k, v in inputs.items()}
-    
-        # Batch generation
-        if temperature > 0:
-            output_ids = self.model.generate(
-                **inputs,
-                max_new_tokens=max_n_tokens, 
-                do_sample=True,
-                temperature=temperature,
-                eos_token_id=self.eos_token_ids,
-                top_p=top_p,
-            )
-        else:
-            output_ids = self.model.generate(
-                **inputs,
-                max_new_tokens=max_n_tokens, 
-                do_sample=False,
-                eos_token_id=self.eos_token_ids,
-                top_p=1,
-                temperature=1, # To prevent warning messages
-            )
-            
+
+        pad_token_id = self.tokenizer.pad_token_id
+
+        try:
+            # Batch generation
+            if temperature > 0:
+                output_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_n_tokens,
+                    do_sample=True,
+                    temperature=temperature,
+                    eos_token_id=self.eos_token_ids,
+                    pad_token_id=pad_token_id,
+                    top_p=top_p,
+                )
+            else:
+                output_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_n_tokens,
+                    do_sample=False,
+                    eos_token_id=self.eos_token_ids,
+                    pad_token_id=pad_token_id,
+                    top_p=1,
+                    temperature=1, # To prevent warning messages
+                )
+        except RuntimeError as e:
+            if "CUDA error" in str(e) or "probability tensor" in str(e):
+                print(f"[WARNING] CUDA 批量生成失败，回退到贪心解码: {e}")
+                output_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_n_tokens,
+                    do_sample=False,
+                    eos_token_id=self.eos_token_ids,
+                    pad_token_id=pad_token_id,
+                    top_p=1,
+                    temperature=1,
+                )
+            else:
+                raise e
+
         # If the model is not an encoder-decoder type, slice off the input tokens
         if not self.model.config.is_encoder_decoder:
             output_ids = output_ids[:, inputs["input_ids"].shape[1]:]
@@ -117,11 +170,11 @@ class HuggingFace(LanguageModel):
 
         return outputs_list
 
-    def extend_eos_tokens(self):        
+    def extend_eos_tokens(self):
         # Add closing braces for Vicuna/Llama eos when using attacker model
         self.eos_token_ids.extend([
             self.tokenizer.encode("}")[1],
-            29913, 
+            29913,
             9092,
             16675])
 

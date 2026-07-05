@@ -1,3 +1,9 @@
 # .gitignore
 modellib/*
 evaluate/*
+__pycache__/
+*.pyc
+results/
+wandb/
+figstep_wandb/
+test
