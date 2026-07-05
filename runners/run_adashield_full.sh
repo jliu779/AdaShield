@@ -151,7 +151,7 @@ fi
 if [[ "$SKIP_BENIGN" != "1" ]]; then
   log ">>> Phase 2: 良性/通用能力 Benchmark (5个)"
   # 良性 benchmark 自动启用相似度门控
-  local benign_flag=0
+  benign_flag=0
   if [[ "$BENIGN_BENCHMARKS" == "1" ]]; then benign_flag=1; fi
 
   for name in "${!BENIGN_BENCHMARK_LIST[@]}"; do

@@ -116,7 +116,7 @@ def get_clip_embedding(clip_model, clip_preprocess, image_path, query):
 # ============================================================
 # 防御提示词池
 # ============================================================
-def build_defense_pool(pool_dir_or_glob, clip_model, clip_preprocess):
+def build_defense_pool(pool_dirs, clip_model, clip_preprocess):
     """
     从训练结果的 CSV 文件中构建防御提示词池。
 
