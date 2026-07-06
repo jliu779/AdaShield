@@ -364,6 +364,25 @@ class MyCogVLM(TargetVLM):
 
 # ==================== 新增 MLLM 目标模型 ====================
 
+
+def _patch_internvl_tokenizer(tokenizer):
+    """修复 InternVL 模型的 tokenizer，添加缺失的 image token 属性"""
+    if not hasattr(tokenizer, "start_image_token"):
+        tokenizer.start_image_token = "<|vision_start|>"
+    if not hasattr(tokenizer, "end_image_token"):
+        tokenizer.end_image_token = "<|vision_end|>"
+    if not hasattr(tokenizer, "context_image_token"):
+        tokenizer.context_image_token = "<|vision_start|>"
+    if not hasattr(tokenizer, "video_token"):
+        tokenizer.video_token = "<|vision_start|>"
+    if not hasattr(tokenizer, "start_image_token_id"):
+        tokenizer.start_image_token_id = tokenizer.convert_tokens_to_ids("<|vision_start|>")
+    if not hasattr(tokenizer, "end_image_token_id"):
+        tokenizer.end_image_token_id = tokenizer.convert_tokens_to_ids("<|vision_end|>")
+    if not hasattr(tokenizer, "context_image_token_id"):
+        tokenizer.context_image_token_id = tokenizer.start_image_token_id
+    return tokenizer
+
 def _load_vlm_model(model_path):
     """统一加载 VLM —— 依次尝试 AutoModelForVision2Seq → AutoModelForCausalLM → AutoModel"""
     # 1) AutoModelForVision2Seq: LLaVA-HF, Qwen2.5-VL, Qwen3-VL
@@ -473,13 +492,15 @@ class MyInternVL35(TargetVLM):
     """InternVL3.5-8B"""
     def __init__(self, args):
         self.model = _load_vlm_model(args.model_path)
-        self.processor = AutoProcessor.from_pretrained(
-            args.model_path,
-            trust_remote_code=True
-        )
         self.tokenizer = AutoTokenizer.from_pretrained(
             args.model_path,
             trust_remote_code=True
+        )
+        _patch_internvl_tokenizer(self.tokenizer)
+        self.processor = AutoProcessor.from_pretrained(
+            args.model_path,
+            trust_remote_code=True,
+            tokenizer=self.tokenizer
         )
         self.temperature = args.temperature
         self.top_p = args.top_p
@@ -518,13 +539,15 @@ class MyInternVL3(TargetVLM):
     """InternVL3-8B"""
     def __init__(self, args):
         self.model = _load_vlm_model(args.model_path)
-        self.processor = AutoProcessor.from_pretrained(
-            args.model_path,
-            trust_remote_code=True
-        )
         self.tokenizer = AutoTokenizer.from_pretrained(
             args.model_path,
             trust_remote_code=True
+        )
+        _patch_internvl_tokenizer(self.tokenizer)
+        self.processor = AutoProcessor.from_pretrained(
+            args.model_path,
+            trust_remote_code=True,
+            tokenizer=self.tokenizer
         )
         self.temperature = args.temperature
         self.top_p = args.top_p
